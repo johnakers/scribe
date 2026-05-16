@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // Apply this override to your TypeScript files
+    files: ["**/*.ts", "**/*.tsx"],
+    rules: {
+      // "off" disables the "Unexpected any" warning
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

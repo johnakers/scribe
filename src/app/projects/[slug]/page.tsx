@@ -4,15 +4,10 @@ import React from "react";
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import { Button } from "../../../components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardContent,
-} from "../../../components/ui/card";
+import { Card } from "../../../components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -63,7 +58,7 @@ interface TableSchema {
   id: string;
   name: string;
   columns: ColumnSchema[];
-  rows: any[];
+  rows: Record<string, string | number | boolean | any[] | null>[];
 }
 
 interface Project {
@@ -100,12 +95,15 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
 
   // Dark mode toggle
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark' || savedTheme === 'light') {
-      setTheme(savedTheme);
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setTheme('dark');
-    }
+    const timer = setTimeout(() => {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        setTheme(savedTheme as 'light' | 'dark');
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        setTheme('dark');
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -116,22 +114,25 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
 
   // Load project from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("scribe_projects");
-    if (saved) {
-      const projects: Project[] = JSON.parse(saved);
-      const found = projects.find((p) => p.id === slug);
-      if (found) {
-        // Migration for old data structures
-        const migratedTables = (found.tables || []).map(t => ({
-          ...t,
-          columns: t.columns.map(c =>
-            typeof c === 'string' ? { name: c, type: 'string' } : c
-          )
-        }));
-        setProject({ ...found, tables: migratedTables });
+    const timer = setTimeout(() => {
+      const saved = localStorage.getItem("scribe_projects");
+      if (saved) {
+        const projects: Project[] = JSON.parse(saved);
+        const found = projects.find((p) => p.id === slug);
+        if (found) {
+          // Migration for old data structures
+          const migratedTables: TableSchema[] = (found.tables || []).map(t => ({
+            ...t,
+            columns: (t.columns as any[]).map(c =>
+              typeof c === 'string' ? { name: c, type: 'string' as const } : c
+            )
+          }));
+          setProject({ ...found, tables: migratedTables });
+        }
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [slug]);
 
   // Update page title
@@ -314,10 +315,10 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
           return;
         }
 
-        const migratedTables = (importedProject.tables || []).map(t => ({
+        const migratedTables: TableSchema[] = (importedProject.tables || []).map(t => ({
           ...t,
-          columns: (t.columns || []).map(c =>
-            typeof c === 'string' ? { name: c, type: 'string' } : c
+          columns: ((t.columns || []) as any[]).map(c =>
+            typeof c === 'string' ? { name: c, type: 'string' as const } : c
           )
         }));
 
@@ -522,7 +523,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                 {col.type === 'reference' ? (
                                   <Select
                                     className="h-8 border-none bg-transparent px-0 focus-visible:ring-0"
-                                    value={row[col.name] || ""}
+                                    value={(typeof row[col.name] === 'number' ? row[col.name] : String(row[col.name] ?? "")) as string | number}
                                     onChange={(e) => {
                                       const newRows = [...table.rows];
                                       newRows[rowIndex] = { ...newRows[rowIndex], [col.name]: e.target.value };
@@ -530,16 +531,20 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                     }}
                                   >
                                     <option value="">— Select Ref —</option>
-                                    {project.tables?.find(t => t.id === col.referencedTableId)?.rows.map((refRow, idx) => (
-                                      <option key={idx} value={refRow.id || refRow.name || idx}>
-                                        {refRow.name || refRow.id || `Row ${idx + 1}`}
-                                      </option>
-                                    ))}
+                                    {project.tables?.find(t => t.id === col.referencedTableId)?.rows.map((refRow, idx) => {
+                                      const val = typeof refRow.id === 'number' ? refRow.id : String(refRow.id ?? refRow.name ?? idx);
+                                      const label = String(refRow.name ?? refRow.id ?? `Row ${idx + 1}`);
+                                      return (
+                                        <option key={idx} value={val}>
+                                          {label}
+                                        </option>
+                                      );
+                                    })}
                                   </Select>
                                 ) : col.type === 'boolean' ? (
                                   <Select
                                     className="h-8 border-none bg-transparent px-0 focus-visible:ring-0"
-                                    value={row[col.name] === true ? "true" : row[col.name] === false ? "false" : ""}
+                                    value={(row[col.name] === true ? "true" : row[col.name] === false ? "false" : "") as string}
                                     onChange={(e) => {
                                       const newRows = [...table.rows];
                                       let val: any = e.target.value;
@@ -557,7 +562,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                 ) : col.type === 'array' ? (
                                   <input
                                     className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30 font-mono text-xs"
-                                    value={Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : row[col.name] || ""}
+                                    value={(Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : String(row[col.name] ?? "")) as string}
                                     onChange={(e) => {
                                       const newRows = [...table.rows];
                                       let val: string | any[] = e.target.value;
@@ -573,7 +578,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                   <input
                                     type={col.type === 'number' ? 'number' : 'text'}
                                     className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30"
-                                    value={row[col.name] || ""}
+                                    value={(typeof row[col.name] === 'number' ? row[col.name] : (Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : String(row[col.name] ?? ""))) as string | number}
                                     onChange={(e) => {
                                       const newRows = [...table.rows];
                                       const val = col.type === 'number' && e.target.value !== "" ? Number(e.target.value) : e.target.value;
