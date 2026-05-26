@@ -25,9 +25,6 @@ export default function Home() {
             Go to Projects <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
-        <Button variant="outline" size="lg" className="px-8">
-          Documentation
-        </Button>
       </div>
 
       <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:gap-12 max-w-4xl">

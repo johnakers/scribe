@@ -74,7 +74,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -99,8 +99,8 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme === 'dark' || savedTheme === 'light') {
         setTheme(savedTheme as 'light' | 'dark');
-      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        setTheme('dark');
+      } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+        setTheme('light');
       }
     }, 0);
     return () => clearTimeout(timer);
