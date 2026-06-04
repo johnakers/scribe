@@ -8,6 +8,7 @@ import { Card } from "../../../components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -59,6 +60,7 @@ interface TableSchema {
   name: string;
   columns: ColumnSchema[];
   rows: Record<string, string | number | boolean | any[] | null>[];
+  idStrategy?: 'integer' | 'uuid' | 'epoch';
 }
 
 interface Project {
@@ -93,6 +95,14 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
   const [tableToDeleteId, setTableToDeleteId] = useState<string | null>(null);
   const [tableToDeleteName, setTableToDeleteName] = useState<string | null>(null);
 
+  const [isDeleteColumnDialogOpen, setIsDeleteColumnDialogOpen] = useState(false);
+  const [columnToDeleteIndex, setColumnToDeleteIndex] = useState<number | null>(null);
+  const [columnToDeleteName, setColumnToDeleteName] = useState<string | null>(null);
+
+  const [isAddTableDialogOpen, setIsAddTableDialogOpen] = useState(false);
+  const [newTableName, setNewTableName] = useState("");
+  const [newTableIdStrategy, setNewTableIdStrategy] = useState<'integer' | 'uuid' | 'epoch'>('integer');
+
   // Dark mode toggle
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -123,6 +133,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
           // Migration for old data structures
           const migratedTables: TableSchema[] = (found.tables || []).map(t => ({
             ...t,
+            idStrategy: t.idStrategy || 'epoch',
             columns: (t.columns as any[]).map(c =>
               typeof c === 'string' ? { name: c, type: 'string' as const } : c
             )
@@ -162,18 +173,28 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     });
   };
 
-  const addTable = () => {
-    if (!project) return;
+  const openAddTableDialog = () => {
+    setNewTableName(`table ${(project.tables?.length || 0) + 1}`);
+    setNewTableIdStrategy('integer');
+    setIsAddTableDialogOpen(true);
+  };
+
+  const handleConfirmAddTable = () => {
+    if (!project || !newTableName.trim()) return;
+
     const newTable: TableSchema = {
       id: Date.now().toString(),
-      name: `Table ${(project.tables?.length || 0) + 1}`,
+      name: newTableName.trim().toLowerCase(),
+      idStrategy: newTableIdStrategy,
       columns: [
-        { name: "id", type: "number" },
+        { name: "id", type: newTableIdStrategy === 'uuid' ? "string" : "number" },
         { name: "name", type: "string" }
       ],
       rows: []
     };
+
     updateProject({ ...project, tables: [...(project.tables || []), newTable] });
+    setIsAddTableDialogOpen(false);
   };
 
   const deleteTable = (id: string) => {
@@ -209,7 +230,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     if (!table) return;
 
     const newCol: ColumnSchema = {
-      name: newColumnName,
+      name: newColumnName.trim().toLowerCase(),
       type: newColumnType,
       arrayType: newColumnType === 'array' ? newArrayType : undefined,
       referencedTableId: (newColumnType === 'reference' || (newColumnType === 'array' && newArrayType === 'reference')) ? referencedTableId : undefined
@@ -220,19 +241,32 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
   };
 
   const deleteColumn = (tableId: string, colIndex: number) => {
-    if (!project || !confirm("Delete this column and its data?")) return;
-    const table = project.tables?.find(t => t.id === tableId);
+    const table = project?.tables?.find(t => t.id === tableId);
     if (!table) return;
 
-    const colName = table.columns[colIndex].name;
-    const newColumns = table.columns.filter((_, i) => i !== colIndex);
+    setActiveTableId(tableId);
+    setColumnToDeleteIndex(colIndex);
+    setColumnToDeleteName(table.columns[colIndex].name);
+    setIsDeleteColumnDialogOpen(true);
+  };
+
+  const handleConfirmDeleteColumn = () => {
+    if (!activeTableId || columnToDeleteIndex === null || !project) return;
+    const table = project.tables?.find(t => t.id === activeTableId);
+    if (!table) return;
+
+    const colName = table.columns[columnToDeleteIndex].name;
+    const newColumns = table.columns.filter((_, i) => i !== columnToDeleteIndex);
     const newRows = table.rows.map(row => {
       const newRow = { ...row };
       delete newRow[colName];
       return newRow;
     });
 
-    updateTable(tableId, { columns: newColumns, rows: newRows });
+    updateTable(activeTableId, { columns: newColumns, rows: newRows });
+    setIsDeleteColumnDialogOpen(false);
+    setColumnToDeleteIndex(null);
+    setColumnToDeleteName(null);
   };
 
   const moveColumn = (tableId: string, index: number, direction: 'left' | 'right') => {
@@ -261,7 +295,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     if (!table) return;
 
     const oldName = table.columns[activeColumnIndex].name;
-    const newName = renamingColumnName.trim();
+    const newName = renamingColumnName.trim().toLowerCase();
     const newCols = [...table.columns];
     newCols[activeColumnIndex] = { ...newCols[activeColumnIndex], name: newName };
 
@@ -282,10 +316,25 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     const table = project?.tables?.find(t => t.id === tableId);
     if (!table) return;
 
-    // Default the 'id' field to the current epoch if the column exists
     const idColumn = table.columns.find(col => col.name.toLowerCase() === 'id');
-    const newRow = idColumn ? { [idColumn.name]: Date.now() } : {};
+    let idValue: any = null;
 
+    if (idColumn) {
+      switch (table.idStrategy || 'epoch') {
+        case 'integer':
+          idValue = table.rows.length + 1;
+          break;
+        case 'uuid':
+          idValue = crypto.randomUUID();
+          break;
+        case 'epoch':
+        default:
+          idValue = Date.now();
+          break;
+      }
+    }
+
+    const newRow = idColumn ? { [idColumn.name]: idValue } : {};
     updateTable(tableId, { rows: [...table.rows, newRow] });
   };
 
@@ -380,7 +429,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
 
   return (
     <main className="min-h-screen bg-background pb-20">
-      <div className="container mx-auto max-w-[1440px] px-4 py-10">
+      <div className="w-full px-4 sm:px-8 py-10">
         <div className="mb-10">
           <div className="flex justify-between items-center mb-6">
             <Button variant="ghost" asChild className="-ml-2 text-muted-foreground hover:text-primary">
@@ -427,7 +476,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
               <Button onClick={handleSaveJson} variant="outline" size="lg" className="h-12 px-6 font-semibold shadow-lg">
                 <Save className="mr-2 h-5 w-5" /> Save JSON
               </Button>
-              <Button onClick={addTable} size="lg" className="h-12 px-6 font-semibold shadow-lg">
+              <Button onClick={openAddTableDialog} size="lg" className="h-12 px-6 font-semibold shadow-lg">
                 <Plus className="mr-2 h-5 w-5" /> Add Table
               </Button>
             </div>
@@ -459,7 +508,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                     <Input
                       className="h-10 w-full bg-transparent font-bold text-2xl border-none focus-visible:ring-0 px-0 hover:bg-muted/50 rounded-lg truncate"
                       value={table.name}
-                      onChange={(e) => updateTable(table.id, { name: e.target.value })}
+                      onChange={(e) => updateTable(table.id, { name: e.target.value.toLowerCase() })}
                     />
                   </div>
                   <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
@@ -602,9 +651,40 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
         )}
       </div>
 
+      <Dialog open={isAddTableDialogOpen} onOpenChange={setIsAddTableDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Table</DialogTitle>
+            <DialogDescription>
+              Create a new data table for your project. Choose an ID generation strategy.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Table Name</Label>
+              <Input value={newTableName} onChange={(e) => setNewTableName(e.target.value)} autoFocus />
+            </div>
+            <div className="grid gap-2">
+              <Label>ID Generation Strategy</Label>
+              <Select value={newTableIdStrategy} onChange={(e) => setNewTableIdStrategy(e.target.value as any)}>
+                <option value="integer">Integer (Auto-increment)</option>
+                <option value="uuid">UUID (Universal ID)</option>
+                <option value="epoch">Epoch (Timestamp)</option>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter><Button onClick={handleConfirmAddTable}>Create Table</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isColumnDialogOpen} onOpenChange={setIsColumnDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader><DialogTitle>Add New Column</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add New Column</DialogTitle>
+            <DialogDescription>
+              Define a new data column. Specify the name and data type.
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Column Name</Label>
@@ -649,7 +729,12 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
 
       <Dialog open={isRenameColumnDialogOpen} onOpenChange={setIsRenameColumnDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader><DialogTitle>Rename Column</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Rename Column</DialogTitle>
+            <DialogDescription>
+              Enter a new name for this column.
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-4 py-4">
             <Input value={renamingColumnName} onChange={(e) => setRenamingColumnName(e.target.value)} autoFocus />
           </div>
@@ -659,10 +744,30 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
 
       <Dialog open={isDeleteTableDialogOpen} onOpenChange={setIsDeleteTableDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader><DialogTitle>Delete Table: {tableToDeleteName}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Delete Table: {tableToDeleteName}</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this table? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDeleteTableDialogOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDeleteTable}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteColumnDialogOpen} onOpenChange={setIsDeleteColumnDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Column: {columnToDeleteName}</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this column and all its data? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteColumnDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmDeleteColumn}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -74,14 +74,14 @@ export default function ProjectsIndex() {
 
     if (editingId) {
       const updated = projects.map(p =>
-        p.id === editingId ? { ...p, ...form, updatedAt: new Date().toLocaleDateString() } : p
+        p.id === editingId ? { ...p, ...form, name: form.name.trim().toLowerCase(), updatedAt: new Date().toLocaleDateString() } : p
       );
       saveToStorage(updated);
       setEditingId(null);
     } else {
       const newProject: Project = {
         id: Date.now().toString(),
-        name: form.name,
+        name: form.name.trim().toLowerCase(),
         description: form.description,
         updatedAt: new Date().toLocaleDateString()
       };
@@ -108,7 +108,7 @@ export default function ProjectsIndex() {
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="container mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-10 py-10">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <h1 className="text-4xl font-bold tracking-tight">Projects</h1>
