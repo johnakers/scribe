@@ -1,5 +1,7 @@
 # Project Reference: Scribe
 
+**Deployment URL:** [https://scribe.club](https://scribe.club)
+
 This document serves as a guide for development standards, tech stack usage, and architectural decisions for the Scribe project.
 
 ## Tech Stack
@@ -8,29 +10,23 @@ This document serves as a guide for development standards, tech stack usage, and
 - **Styling:** Tailwind CSS
 - **UI Components:** [shadcn/ui](https://ui.shadcn.com/)
 - **Icons:** Lucide React
+- **Deployment:** Vercel (Production: scribe.club)
 
 ## UI Component Strategy (shadcn/ui)
 
-We use `shadcn/ui` for our component library. Unlike traditional component libraries, `shadcn/ui` components are added directly to the source code, allowing for full customization.
-
-### Adding Components
-
-To add a new component, use the CLI:
-
-```bash
-npx shadcn-ui@latest add [component-name]
-```
-
-_Example:_ `npx shadcn-ui@latest add button`
-
-### Component Location
-
-All shadcn components are located in `@/components/ui`. Shared or complex custom components should be placed in `@/components`.
+We use `shadcn/ui` for our component library. All components are located in `@/components/ui`. Shared or complex custom components should be placed in `@/components`.
 
 ### Customization
 
 - **Theming:** Global styles and CSS variables are located in `src/app/globals.css`.
-- **Tailwind:** Use the `cn()` utility (found in `lib/utils.ts`) for conditional class merging to ensure Tailwind classes are applied correctly.
+- **Tailwind:** Use the `cn()` utility (found in `lib/utils.ts`) for conditional class merging.
+
+## Core Features
+
+- **Relational Tables:** Supports linking entries between tables using `reference` column types.
+- **Flexible IDs:** Multiple strategies for unique identifiers: Integer, UUID, and Epoch.
+- **Data Persistence:** Uses `localStorage` for client-side persistence and supports JSON import/export.
+- **JSON Engine:** Real-time syntax highlighting for project-wide JSON structure.
 
 ## Development Guidelines
 
@@ -38,12 +34,11 @@ All shadcn components are located in `@/components/ui`. Shared or complex custom
 
 - Strict mode is enabled. Avoid using `any`.
 - Define interfaces for props and API responses.
-- Leverage the `type` keyword for simple data structures and `interface` for object-oriented definitions.
 
 ### Styling
 
-- Prefer Tailwind CSS classes over CSS modules or inline styles.
-- Maintain accessibility (ARIA labels, keyboard navigation) by leveraging the Radix UI primitives baked into shadcn.
+- Prefer Tailwind CSS classes over CSS modules.
+- Maintain dark mode compatibility using Tailwind's `dark:` variant and the `dark` class on `document.documentElement`.
 
 ### File Naming
 
