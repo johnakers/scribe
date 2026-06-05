@@ -174,7 +174,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
   };
 
   const openAddTableDialog = () => {
-    setNewTableName(`table ${(project.tables?.length || 0) + 1}`);
+    setNewTableName(`table ${(project?.tables?.length || 0) + 1}`);
     setNewTableIdStrategy('integer');
     setIsAddTableDialogOpen(true);
   };
