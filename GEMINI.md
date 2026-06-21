@@ -18,14 +18,17 @@ We use `shadcn/ui` for our component library. All components are located in `@/c
 
 ### Customization
 
-- **Theming:** Global styles and CSS variables are located in `src/app/globals.css`.
+- **Theming:** Global styles and CSS variables are located in `src/app/globals.css`. By design, `--radius` is configured to `0rem` to enforce a sharp, non-rounded, modern aesthetic across all dialogs, buttons, cards, and input fields.
 - **Tailwind:** Use the `cn()` utility (found in `lib/utils.ts`) for conditional class merging.
 
 ## Core Features
 
 - **Relational Tables:** Supports linking entries between tables using `reference` column types.
+- **Modal-based Reference Selection:** Reference fields open an interactive custom select dialog/modal allowing quick row matching or reference clearing.
 - **Flexible IDs:** Multiple strategies for unique identifiers: Integer, UUID, and Epoch.
 - **Data Persistence:** Uses `localStorage` for client-side persistence and supports JSON import/export.
+- **Presentational Row Sorting:** Row attributes can be sorted in ascending/descending order on click (defaulting to ID ascending) presentationally on the front-end, leaving raw JSON files and schema previews cleanly unsorted.
+- **Row Management & Hiding:** Supports adding and deleting rows (with confirmation dialogs), and collapsing/hiding table rows for cleaner workspace views.
 - **JSON Engine:** Real-time syntax highlighting for project-wide JSON structure.
 
 ## Development Guidelines

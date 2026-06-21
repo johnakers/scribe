@@ -30,20 +30,23 @@ import {
   Copy,
   Check,
   Sun,
-  Moon
+  Moon,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from "lucide-react";
 
 // Custom Input component
 const Input = ({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input
-    className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    className={`flex h-10 w-full rounded-none border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     {...props}
   />
 );
 
 const Select = ({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => (
   <select
-    className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    className={`flex h-10 w-full rounded-none border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     {...props}
   />
 );
@@ -61,6 +64,11 @@ interface TableSchema {
   columns: ColumnSchema[];
   rows: Record<string, string | number | boolean | any[] | null>[];
   idStrategy?: 'integer' | 'uuid' | 'epoch';
+}
+
+interface TableSortConfig {
+  column: string;
+  direction: 'asc' | 'desc';
 }
 
 interface Project {
@@ -98,6 +106,26 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
   const [isDeleteColumnDialogOpen, setIsDeleteColumnDialogOpen] = useState(false);
   const [columnToDeleteIndex, setColumnToDeleteIndex] = useState<number | null>(null);
   const [columnToDeleteName, setColumnToDeleteName] = useState<string | null>(null);
+
+  const [isDeleteRowDialogOpen, setIsDeleteRowDialogOpen] = useState(false);
+  const [rowToDeleteIndex, setRowToDeleteIndex] = useState<number | null>(null);
+
+  const [sortConfigs, setSortConfigs] = useState<Record<string, TableSortConfig>>({});
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+  const [hiddenTables, setHiddenTables] = useState<Record<string, boolean>>({});
+
+  const toggleHideTableRows = (tableId: string) => {
+    setHiddenTables(prev => ({
+      ...prev,
+      [tableId]: !prev[tableId]
+    }));
+  };
+
+  const [isRefSelectDialogOpen, setIsRefSelectDialogOpen] = useState(false);
+  const [activeRefTableId, setActiveRefTableId] = useState<string | null>(null);
+  const [activeRefRowIndex, setActiveRefRowIndex] = useState<number | null>(null);
+  const [activeRefColName, setActiveRefColName] = useState<string | null>(null);
+  const [activeRefTargetTableId, setActiveRefTargetTableId] = useState<string | null>(null);
 
   const [isAddTableDialogOpen, setIsAddTableDialogOpen] = useState(false);
   const [newTableName, setNewTableName] = useState("");
@@ -269,6 +297,125 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     setColumnToDeleteName(null);
   };
 
+  const deleteRow = (tableId: string, rowIndex: number) => {
+    setActiveTableId(tableId);
+    setRowToDeleteIndex(rowIndex);
+    setIsDeleteRowDialogOpen(true);
+  };
+
+  const handleConfirmDeleteRow = () => {
+    if (!activeTableId || rowToDeleteIndex === null || !project) return;
+    const table = project.tables?.find(t => t.id === activeTableId);
+    if (!table) return;
+
+    const newRows = table.rows.filter((_, i) => i !== rowToDeleteIndex);
+    updateTable(activeTableId, { rows: newRows });
+    setIsDeleteRowDialogOpen(false);
+    setRowToDeleteIndex(null);
+  };
+
+  const openReferenceSelect = (tableId: string, rowIndex: number, colName: string, targetTableId: string) => {
+    setActiveRefTableId(tableId);
+    setActiveRefRowIndex(rowIndex);
+    setActiveRefColName(colName);
+    setActiveRefTargetTableId(targetTableId);
+    setIsRefSelectDialogOpen(true);
+  };
+
+  const handleSelectReference = (value: string | number) => {
+    if (!activeRefTableId || activeRefRowIndex === null || !activeRefColName) return;
+    const table = project?.tables?.find(t => t.id === activeRefTableId);
+    if (!table) return;
+
+    const newRows = [...table.rows];
+    newRows[activeRefRowIndex] = { ...newRows[activeRefRowIndex], [activeRefColName]: value };
+    updateTable(activeRefTableId, { rows: newRows });
+    setIsRefSelectDialogOpen(false);
+    
+    setActiveRefTableId(null);
+    setActiveRefRowIndex(null);
+    setActiveRefColName(null);
+    setActiveRefTargetTableId(null);
+  };
+
+  const getTableSortConfig = (table: TableSchema) => {
+    const config = sortConfigs[table.id];
+    if (config && table.columns.some(col => col.name === config.column)) {
+      return config;
+    }
+    // Default to 'id' asc if it exists
+    const hasId = table.columns.some(col => col.name.toLowerCase() === 'id');
+    if (hasId) {
+      return { column: 'id', direction: 'asc' as const };
+    }
+    // Fallback to first column
+    if (table.columns.length > 0) {
+      return { column: table.columns[0].name, direction: 'asc' as const };
+    }
+    return null;
+  };
+
+  const toggleSort = (tableId: string, columnName: string) => {
+    setSortConfigs(prev => {
+      const table = project?.tables?.find(t => t.id === tableId);
+      if (!table) return prev;
+      
+      const current = getTableSortConfig(table);
+      if (current && current.column === columnName) {
+        return {
+          ...prev,
+          [tableId]: {
+            column: columnName,
+            direction: current.direction === 'asc' ? 'desc' : 'asc'
+          }
+        };
+      } else {
+        return {
+          ...prev,
+          [tableId]: {
+            column: columnName,
+            direction: 'asc'
+          }
+        };
+      }
+    });
+  };
+
+  const getSortedRowsWithIndices = (table: TableSchema) => {
+    const sortConfig = getTableSortConfig(table);
+    const rowsWithIndices = table.rows.map((row, index) => ({ row, index }));
+    
+    if (!sortConfig) return rowsWithIndices;
+    
+    const { column: sortKey, direction } = sortConfig;
+    const colSpec = table.columns.find(col => col.name === sortKey);
+    const columnType = colSpec?.type;
+
+    rowsWithIndices.sort((a, b) => {
+      let valA = a.row[sortKey];
+      let valB = b.row[sortKey];
+
+      if (valA === undefined || valA === null) return direction === 'asc' ? 1 : -1;
+      if (valB === undefined || valB === null) return direction === 'asc' ? -1 : 1;
+
+      if (columnType === 'number') {
+        const numA = Number(valA);
+        const numB = Number(valB);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return direction === 'asc' ? numA - numB : numB - numA;
+        }
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      if (strA < strB) return direction === 'asc' ? -1 : 1;
+      if (strA > strB) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return rowsWithIndices;
+  };
+
   const moveColumn = (tableId: string, index: number, direction: 'left' | 'right') => {
     const table = project?.tables?.find(t => t.id === tableId);
     if (!table) return;
@@ -437,14 +584,23 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
               </Link>
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              className="text-muted-foreground hover:text-primary"
-            >
-              {theme === 'light' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setIsChangelogOpen(true)}
+                className="text-muted-foreground hover:text-primary"
+              >
+                Changelog
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="text-muted-foreground hover:text-primary"
+              >
+                {theme === 'light' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b pt-4 pb-12">
             <div>
@@ -506,7 +662,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <TableIcon className="h-6 w-6 text-primary" />
                     <Input
-                      className="h-10 w-full bg-transparent font-bold text-2xl border-none focus-visible:ring-0 px-0 hover:bg-muted/50 rounded-lg truncate"
+                      className="h-10 w-full bg-transparent font-bold text-2xl border-none focus-visible:ring-0 px-0 hover:bg-muted/50 rounded-none truncate"
                       value={table.name}
                       onChange={(e) => updateTable(table.id, { name: e.target.value.toLowerCase() })}
                     />
@@ -518,27 +674,54 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                     <Button variant="outline" size="sm" onClick={() => addRow(table.id)} className="h-9">
                       <PlusCircle className="mr-2 h-4 w-4" /> Row
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleHideTableRows(table.id)}
+                      className="text-muted-foreground h-9 w-9 hover:bg-muted"
+                      title={hiddenTables[table.id] ? "Show rows" : "Hide rows"}
+                    >
+                      {hiddenTables[table.id] ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+                    </Button>
                     <Button variant="ghost" size="icon" className="text-destructive h-9 w-9 hover:bg-destructive/10" onClick={() => deleteTable(table.id)}>
                       <Trash2 className="h-5 w-5" />
                     </Button>
                   </div>
                 </div>
 
-                <div className="rounded-xl border-2 shadow-sm overflow-hidden bg-card">
+                <div className="rounded-none border-2 shadow-sm overflow-hidden bg-card">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-base text-left border-collapse table-fixed">
+                    <table className="w-full text-sm text-left border-collapse table-auto min-w-full">
                       <thead className="bg-muted/70 text-muted-foreground border-b-2">
                         <tr>
                           {table.columns.map((col, i) => (
                             <th
                               key={i}
                               className={`px-6 py-4 border-r last:border-r-0 font-bold uppercase text-xs tracking-widest group/header ${
-                                col.name.toLowerCase() === 'id' ? 'w-24' : ''
+                                col.name.toLowerCase() === 'id' ? 'w-24 min-w-[96px]' : 'min-w-[150px]'
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex flex-col overflow-hidden">
-                                  <span className="truncate">{col.name}</span>
+                                  <div
+                                    className="flex items-center gap-1.5 cursor-pointer select-none hover:text-foreground transition-colors overflow-hidden"
+                                    onClick={() => toggleSort(table.id, col.name)}
+                                  >
+                                    <span className="truncate">{col.name}</span>
+                                    {(() => {
+                                      const sortConfig = getTableSortConfig(table);
+                                      if (sortConfig && sortConfig.column === col.name) {
+                                        return sortConfig.direction === 'asc' ? (
+                                          <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
+                                        ) : (
+                                          <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
+                                        );
+                                      }
+                                      return (
+                                        <ArrowUpDown className="h-3 w-3 text-muted-foreground/30 group-hover/header:text-muted-foreground/60 shrink-0 transition-colors" />
+                                      );
+                                    })()}
+                                  </div>
                                   {(col.type === 'reference' || (col.type === 'array' && col.arrayType === 'reference')) && (
                                     <span className="text-[10px] text-primary lowercase font-normal truncate">
                                       {col.type === 'array' ? `array<${project.tables?.find(t => t.id === col.referencedTableId)?.name || col.arrayType}>` : `ref: ${project.tables?.find(t => t.id === col.referencedTableId)?.name}`}
@@ -562,34 +745,39 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                               </div>
                             </th>
                           ))}
+                          <th className="px-6 py-4 text-center w-28 min-w-[112px] font-bold uppercase text-xs tracking-widest last:border-r-0">
+                            Actions
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {table.rows.map((row, rowIndex) => (
-                          <tr key={rowIndex} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                        {!hiddenTables[table.id] && getSortedRowsWithIndices(table).map(({ row, index: originalIndex }) => (
+                          <tr key={originalIndex} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
                             {table.columns.map((col, colIndex) => (
                               <td key={colIndex} className="px-6 py-3 border-r last:border-r-0">
                                 {col.type === 'reference' ? (
-                                  <Select
-                                    className="h-8 border-none bg-transparent px-0 focus-visible:ring-0"
-                                    value={(typeof row[col.name] === 'number' ? row[col.name] : String(row[col.name] ?? "")) as string | number}
-                                    onChange={(e) => {
-                                      const newRows = [...table.rows];
-                                      newRows[rowIndex] = { ...newRows[rowIndex], [col.name]: e.target.value };
-                                      updateTable(table.id, { rows: newRows });
-                                    }}
-                                  >
-                                    <option value="">— Select Ref —</option>
-                                    {project.tables?.find(t => t.id === col.referencedTableId)?.rows.map((refRow, idx) => {
-                                      const val = typeof refRow.id === 'number' ? refRow.id : String(refRow.id ?? refRow.name ?? idx);
-                                      const label = String(refRow.name ?? refRow.id ?? `Row ${idx + 1}`);
-                                      return (
-                                        <option key={idx} value={val}>
+                                  (() => {
+                                    const val = row[col.name];
+                                    const targetTable = project.tables?.find(t => t.id === col.referencedTableId);
+                                    const referencedRow = targetTable?.rows.find(refRow => {
+                                      const refVal = typeof refRow.id === 'number' ? refRow.id : String(refRow.id ?? refRow.name ?? "");
+                                      return String(refVal) === String(val);
+                                    });
+                                    const label = referencedRow ? String(referencedRow.name ?? referencedRow.id ?? "Selected Row") : "— Select Ref —";
+                                    return (
+                                      <button
+                                        onClick={() => openReferenceSelect(table.id, originalIndex, col.name, col.referencedTableId || "")}
+                                        className="w-full h-8 text-left bg-transparent hover:bg-muted/40 transition-colors px-0 flex items-center justify-between text-sm select-none border border-transparent rounded-none group/cell animate-fade-in"
+                                      >
+                                        <span className={referencedRow ? "text-foreground truncate" : "text-muted-foreground/40 truncate"}>
                                           {label}
-                                        </option>
-                                      );
-                                    })}
-                                  </Select>
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground/30 opacity-0 group-hover/cell:opacity-100 transition-opacity whitespace-nowrap pl-1 pr-1 shrink-0">
+                                          Edit
+                                        </span>
+                                      </button>
+                                    );
+                                  })()
                                 ) : col.type === 'boolean' ? (
                                   <Select
                                     className="h-8 border-none bg-transparent px-0 focus-visible:ring-0"
@@ -600,13 +788,13 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                       if (val === "true") val = true;
                                       else if (val === "false") val = false;
                                       else val = "";
-                                      newRows[rowIndex] = { ...newRows[rowIndex], [col.name]: val };
+                                      newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: val };
                                       updateTable(table.id, { rows: newRows });
                                     }}
                                   >
-                                    <option value="">—</option>
-                                    <option value="true">True</option>
-                                    <option value="false">False</option>
+                                    <option value="" className="bg-popover text-foreground">—</option>
+                                    <option value="true" className="bg-popover text-foreground">True</option>
+                                    <option value="false" className="bg-popover text-foreground">False</option>
                                   </Select>
                                 ) : col.type === 'array' ? (
                                   <input
@@ -618,7 +806,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                       try {
                                         if (val.trim().startsWith('[') && val.trim().endsWith(']')) val = JSON.parse(val);
                                       } catch (err) {}
-                                      newRows[rowIndex] = { ...newRows[rowIndex], [col.name]: val };
+                                      newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: val };
                                       updateTable(table.id, { rows: newRows });
                                     }}
                                     placeholder="[]"
@@ -631,7 +819,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                     onChange={(e) => {
                                       const newRows = [...table.rows];
                                       const val = col.type === 'number' && e.target.value !== "" ? Number(e.target.value) : e.target.value;
-                                      newRows[rowIndex] = { ...newRows[rowIndex], [col.name]: val };
+                                      newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: val };
                                       updateTable(table.id, { rows: newRows });
                                     }}
                                     placeholder="..."
@@ -639,6 +827,16 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                 )}
                               </td>
                             ))}
+                            <td className="px-6 py-3 text-center border-r last:border-r-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive h-8 w-8 hover:bg-destructive/10"
+                                onClick={() => deleteRow(table.id, originalIndex)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -769,6 +967,109 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
             <Button variant="outline" onClick={() => setIsDeleteColumnDialogOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDeleteColumn}>Delete</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteRowDialogOpen} onOpenChange={setIsDeleteRowDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Row</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this row? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteRowDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmDeleteRow}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isChangelogOpen} onOpenChange={setIsChangelogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Scribe Changelog</DialogTitle>
+            <DialogDescription>
+              Recent updates and improvements to the Scribe editor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto pr-2">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <h4 className="font-bold text-sm text-primary">v1.1.0</h4>
+                <span className="text-xs text-muted-foreground">June 2026</span>
+              </div>
+              <ul className="list-disc pl-5 text-sm space-y-1 text-muted-foreground">
+                <li>Upgraded reference selections from basic dropdown elements to custom dialog selection modals.</li>
+                <li>Added ability to collapse/hide table rows via a toggle button next to row/column actions.</li>
+                <li>Added interactive column headers to sort table rows presentationally, preserving original unsorted JSON values in file saves and preview tabs.</li>
+                <li>Added support for deleting individual table rows, backed by a confirmation dialog to prevent accidental data loss.</li>
+              </ul>
+            </div>
+            <div className="space-y-2 border-t pt-4">
+              <div className="flex justify-between items-center">
+                <h4 className="font-bold text-sm text-primary">v1.0.0</h4>
+                <span className="text-xs text-muted-foreground">Core Release</span>
+              </div>
+              <ul className="list-disc pl-5 text-sm space-y-1 text-muted-foreground">
+                <li>Introduced relational tables with dynamic column types (string, number, boolean, array, reference).</li>
+                <li>Multiple ID generation strategies: Integer, UUID, and Epoch.</li>
+                <li>Live syntax-highlighted JSON schema preview.</li>
+                <li>JSON import and export functionality.</li>
+                <li>Dark/Light mode support.</li>
+              </ul>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRefSelectDialogOpen} onOpenChange={setIsRefSelectDialogOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Select Reference</DialogTitle>
+            <DialogDescription>
+              Select a row from the referenced table <strong>{project.tables?.find(t => t.id === activeRefTargetTableId)?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4 max-h-[50vh] overflow-y-auto pr-2">
+            <button
+              onClick={() => handleSelectReference("")}
+              className="w-full text-left px-4 py-3 hover:bg-muted border border-transparent hover:border-input transition-all flex items-center justify-between group rounded-none"
+            >
+              <span className="text-muted-foreground font-medium">— Clear Reference —</span>
+            </button>
+            {project.tables?.find(t => t.id === activeRefTargetTableId)?.rows.map((refRow, idx) => {
+              const val = typeof refRow.id === 'number' ? refRow.id : String(refRow.id ?? refRow.name ?? idx);
+              const label = String(refRow.name ?? refRow.id ?? `Row ${idx + 1}`);
+              const isSelected = String(val) === String(
+                activeRefTableId && activeRefRowIndex !== null && activeRefColName
+                  ? project.tables?.find(t => t.id === activeRefTableId)?.rows[activeRefRowIndex]?.[activeRefColName] ?? ""
+                  : ""
+              );
+              
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectReference(val)}
+                  className={`w-full text-left px-4 py-3 hover:bg-muted border transition-all flex items-center justify-between group rounded-none ${
+                    isSelected ? 'border-primary bg-primary/5' : 'border-transparent hover:border-input'
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <span className={`font-semibold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                      {label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">
+                      ID: {String(refRow.id ?? idx)}
+                    </span>
+                  </div>
+                  {isSelected && (
+                    <span className="text-primary font-bold text-xs">Selected</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </DialogContent>
       </Dialog>
     </main>
