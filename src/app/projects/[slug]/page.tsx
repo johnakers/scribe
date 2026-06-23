@@ -53,9 +53,10 @@ const Select = ({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectEl
 
 interface ColumnSchema {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'reference' | 'array';
+  type: 'string' | 'number' | 'boolean' | 'reference' | 'array' | 'json';
   arrayType?: 'string' | 'number' | 'boolean' | 'reference';
   referencedTableId?: string;
+  nullable?: boolean;
 }
 
 interface TableSchema {
@@ -91,9 +92,10 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
   // Modal States
   const [isColumnDialogOpen, setIsColumnDialogOpen] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
-  const [newColumnType, setNewColumnType] = useState<'string' | 'number' | 'boolean' | 'reference' | 'array'>('string');
+  const [newColumnType, setNewColumnType] = useState<'string' | 'number' | 'boolean' | 'reference' | 'array' | 'json'>('string');
   const [newArrayType, setNewArrayType] = useState<'string' | 'number' | 'boolean' | 'reference'>('string');
   const [referencedTableId, setReferencedTableId] = useState<string>("");
+  const [newColumnNotNull, setNewColumnNotNull] = useState(false);
 
   const [isRenameColumnDialogOpen, setIsRenameColumnDialogOpen] = useState(false);
   const [renamingColumnName, setRenamingColumnName] = useState("");
@@ -215,7 +217,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
       name: newTableName.trim().toLowerCase(),
       idStrategy: newTableIdStrategy,
       columns: [
-        { name: "id", type: newTableIdStrategy === 'uuid' ? "string" : "number" },
+        { name: "id", type: newTableIdStrategy === 'uuid' ? "string" : "number", nullable: false },
         { name: "name", type: "string" }
       ],
       rows: []
@@ -249,6 +251,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     setNewColumnName("");
     setNewColumnType('string');
     setReferencedTableId("");
+    setNewColumnNotNull(false);
     setIsColumnDialogOpen(true);
   };
 
@@ -261,7 +264,8 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
       name: newColumnName.trim().toLowerCase(),
       type: newColumnType,
       arrayType: newColumnType === 'array' ? newArrayType : undefined,
-      referencedTableId: (newColumnType === 'reference' || (newColumnType === 'array' && newArrayType === 'reference')) ? referencedTableId : undefined
+      referencedTableId: (newColumnType === 'reference' || (newColumnType === 'array' && newArrayType === 'reference')) ? referencedTableId : undefined,
+      nullable: !newColumnNotNull
     };
 
     updateTable(activeTableId, { columns: [...table.columns, newCol] });
@@ -392,8 +396,8 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
     const columnType = colSpec?.type;
 
     rowsWithIndices.sort((a, b) => {
-      let valA = a.row[sortKey];
-      let valB = b.row[sortKey];
+      const valA = a.row[sortKey];
+      const valB = b.row[sortKey];
 
       if (valA === undefined || valA === null) return direction === 'asc' ? 1 : -1;
       if (valB === undefined || valB === null) return direction === 'asc' ? -1 : 1;
@@ -406,8 +410,12 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
         }
       }
 
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
+      const strA = (columnType === 'json' || Array.isArray(valA) || (typeof valA === 'object' && valA !== null))
+        ? JSON.stringify(valA).toLowerCase()
+        : String(valA).toLowerCase();
+      const strB = (columnType === 'json' || Array.isArray(valB) || (typeof valB === 'object' && valB !== null))
+        ? JSON.stringify(valB).toLowerCase()
+        : String(valB).toLowerCase();
       if (strA < strB) return direction === 'asc' ? -1 : 1;
       if (strA > strB) return direction === 'asc' ? 1 : -1;
       return 0;
@@ -525,7 +533,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
           updatedAt: new Date().toLocaleDateString()
         });
         if (fileInputRef.current) fileInputRef.current.value = "";
-      } catch (error) {
+      } catch {
         alert("Failed to parse JSON file.");
       }
     };
@@ -707,7 +715,10 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                                     className="flex items-center gap-1.5 cursor-pointer select-none hover:text-foreground transition-colors overflow-hidden"
                                     onClick={() => toggleSort(table.id, col.name)}
                                   >
-                                    <span className="truncate">{col.name}</span>
+                                    <span className="truncate">
+                                      {col.name}
+                                      {col.nullable !== false && <span className="text-muted-foreground ml-0.5 font-normal">?</span>}
+                                    </span>
                                     {(() => {
                                       const sortConfig = getTableSortConfig(table);
                                       if (sortConfig && sortConfig.column === col.name) {
@@ -753,80 +764,115 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                       <tbody>
                         {!hiddenTables[table.id] && getSortedRowsWithIndices(table).map(({ row, index: originalIndex }) => (
                           <tr key={originalIndex} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-                            {table.columns.map((col, colIndex) => (
-                              <td key={colIndex} className="px-6 py-3 border-r last:border-r-0">
-                                {col.type === 'reference' ? (
-                                  (() => {
-                                    const val = row[col.name];
-                                    const targetTable = project.tables?.find(t => t.id === col.referencedTableId);
-                                    const referencedRow = targetTable?.rows.find(refRow => {
-                                      const refVal = typeof refRow.id === 'number' ? refRow.id : String(refRow.id ?? refRow.name ?? "");
-                                      return String(refVal) === String(val);
-                                    });
-                                    const label = referencedRow ? String(referencedRow.name ?? referencedRow.id ?? "Selected Row") : "— Select Ref —";
-                                    return (
-                                      <button
-                                        onClick={() => openReferenceSelect(table.id, originalIndex, col.name, col.referencedTableId || "")}
-                                        className="w-full h-8 text-left bg-transparent hover:bg-muted/40 transition-colors px-0 flex items-center justify-between text-sm select-none border border-transparent rounded-none group/cell animate-fade-in"
-                                      >
-                                        <span className={referencedRow ? "text-foreground truncate" : "text-muted-foreground/40 truncate"}>
-                                          {label}
-                                        </span>
-                                        <span className="text-[10px] text-muted-foreground/30 opacity-0 group-hover/cell:opacity-100 transition-opacity whitespace-nowrap pl-1 pr-1 shrink-0">
-                                          Edit
-                                        </span>
-                                      </button>
-                                    );
-                                  })()
-                                ) : col.type === 'boolean' ? (
-                                  <Select
-                                    className="h-8 border-none bg-transparent px-0 focus-visible:ring-0"
-                                    value={(row[col.name] === true ? "true" : row[col.name] === false ? "false" : "") as string}
-                                    onChange={(e) => {
-                                      const newRows = [...table.rows];
-                                      let val: any = e.target.value;
-                                      if (val === "true") val = true;
-                                      else if (val === "false") val = false;
-                                      else val = "";
-                                      newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: val };
-                                      updateTable(table.id, { rows: newRows });
-                                    }}
-                                  >
-                                    <option value="" className="bg-popover text-foreground">—</option>
-                                    <option value="true" className="bg-popover text-foreground">True</option>
-                                    <option value="false" className="bg-popover text-foreground">False</option>
-                                  </Select>
-                                ) : col.type === 'array' ? (
-                                  <input
-                                    className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30 font-mono text-xs"
-                                    value={(Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : String(row[col.name] ?? "")) as string}
-                                    onChange={(e) => {
-                                      const newRows = [...table.rows];
-                                      let val: string | any[] = e.target.value;
-                                      try {
-                                        if (val.trim().startsWith('[') && val.trim().endsWith(']')) val = JSON.parse(val);
-                                      } catch (err) {}
-                                      newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: val };
-                                      updateTable(table.id, { rows: newRows });
-                                    }}
-                                    placeholder="[]"
-                                  />
-                                ) : (
-                                  <input
-                                    type={col.type === 'number' ? 'number' : 'text'}
-                                    className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30"
-                                    value={(typeof row[col.name] === 'number' ? row[col.name] : (Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : String(row[col.name] ?? ""))) as string | number}
-                                    onChange={(e) => {
-                                      const newRows = [...table.rows];
-                                      const val = col.type === 'number' && e.target.value !== "" ? Number(e.target.value) : e.target.value;
-                                      newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: val };
-                                      updateTable(table.id, { rows: newRows });
-                                    }}
-                                    placeholder="..."
-                                  />
-                                )}
-                              </td>
-                            ))}
+                            {table.columns.map((col, colIndex) => {
+                              const val = row[col.name];
+                              const isInvalid = col.nullable === false && (val === undefined || val === null || val === "");
+                              return (
+                                <td
+                                  key={colIndex}
+                                  className={`px-6 py-3 border-r last:border-r-0 relative transition-colors duration-300 ${
+                                    isInvalid ? 'bg-destructive/10 border-destructive/20 animate-fade-in' : ''
+                                  }`}
+                                >
+                                  {col.type === 'reference' ? (
+                                    (() => {
+                                      const targetTable = project.tables?.find(t => t.id === col.referencedTableId);
+                                      const referencedRow = targetTable?.rows.find(refRow => {
+                                        const refVal = typeof refRow.id === 'number' ? refRow.id : String(refRow.id ?? refRow.name ?? "");
+                                        return String(refVal) === String(val);
+                                      });
+                                      const label = referencedRow ? String(referencedRow.name ?? referencedRow.id ?? "Selected Row") : "— Select Ref —";
+                                      return (
+                                        <button
+                                          onClick={() => openReferenceSelect(table.id, originalIndex, col.name, col.referencedTableId || "")}
+                                          className="w-full h-8 text-left bg-transparent hover:bg-muted/40 transition-colors px-0 flex items-center justify-between text-sm select-none border border-transparent rounded-none group/cell animate-fade-in"
+                                        >
+                                          <span className={referencedRow ? "text-foreground truncate" : "text-muted-foreground/40 truncate"}>
+                                            {label}
+                                          </span>
+                                          <span className="text-[10px] text-muted-foreground/30 opacity-0 group-hover/cell:opacity-100 transition-opacity whitespace-nowrap pl-1 pr-1 shrink-0">
+                                            Edit
+                                          </span>
+                                        </button>
+                                      );
+                                    })()
+                                  ) : col.type === 'boolean' ? (
+                                    <Select
+                                      className="h-8 border-none bg-transparent px-0 focus-visible:ring-0"
+                                      value={(row[col.name] === true ? "true" : row[col.name] === false ? "false" : "") as string}
+                                      onChange={(e) => {
+                                        const newRows = [...table.rows];
+                                        let v: any = e.target.value;
+                                        if (v === "true") v = true;
+                                        else if (v === "false") v = false;
+                                        else v = "";
+                                        newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: v };
+                                        updateTable(table.id, { rows: newRows });
+                                      }}
+                                    >
+                                      <option value="" className="bg-popover text-foreground">—</option>
+                                      <option value="true" className="bg-popover text-foreground">True</option>
+                                      <option value="false" className="bg-popover text-foreground">False</option>
+                                    </Select>
+                                  ) : col.type === 'array' ? (
+                                    <input
+                                      className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30 font-mono text-xs"
+                                      value={(Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : String(row[col.name] ?? "")) as string}
+                                      onChange={(e) => {
+                                        const newRows = [...table.rows];
+                                        let v: string | any[] = e.target.value;
+                                        try {
+                                          if (v.trim().startsWith('[') && v.trim().endsWith(']')) v = JSON.parse(v);
+                                        } catch {
+                                        }
+                                        newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: v };
+                                        updateTable(table.id, { rows: newRows });
+                                      }}
+                                      placeholder="[]"
+                                    />
+                                  ) : col.type === 'json' ? (
+                                    <input
+                                      className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30 font-mono text-xs"
+                                      value={(typeof row[col.name] === 'object' && row[col.name] !== null ? JSON.stringify(row[col.name]) : String(row[col.name] ?? "")) as string}
+                                      onChange={(e) => {
+                                        const newRows = [...table.rows];
+                                        let v: any = e.target.value;
+                                        try {
+                                          const trimmed = v.trim();
+                                          if (trimmed === "") {
+                                            v = null;
+                                          } else {
+                                            v = JSON.parse(trimmed);
+                                          }
+                                        } catch {
+                                        }
+                                        newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: v };
+                                        updateTable(table.id, { rows: newRows });
+                                      }}
+                                      placeholder="{}"
+                                    />
+                                  ) : (
+                                    <input
+                                      type={col.type === 'number' ? 'number' : 'text'}
+                                      className="w-full bg-transparent focus:outline-none placeholder:text-muted-foreground/30"
+                                      value={(typeof row[col.name] === 'number' ? row[col.name] : (Array.isArray(row[col.name]) ? JSON.stringify(row[col.name]) : String(row[col.name] ?? ""))) as string | number}
+                                      onChange={(e) => {
+                                        const newRows = [...table.rows];
+                                        const v = col.type === 'number' && e.target.value !== "" ? Number(e.target.value) : e.target.value;
+                                        newRows[originalIndex] = { ...newRows[originalIndex], [col.name]: v };
+                                        updateTable(table.id, { rows: newRows });
+                                      }}
+                                      placeholder="..."
+                                    />
+                                  )}
+                                  {isInvalid && (
+                                    <div className="absolute top-0.5 right-1 text-[9px] font-semibold text-destructive/80 pointer-events-none select-none tracking-wider uppercase animate-pulse">
+                                      invalid
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
                             <td className="px-6 py-3 text-center border-r last:border-r-0">
                               <Button
                                 variant="ghost"
@@ -896,6 +942,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                 <option value="boolean">Boolean</option>
                 <option value="array">Array</option>
                 <option value="reference">Reference</option>
+                <option value="json">JSON</option>
               </Select>
             </div>
             {newColumnType === 'array' && (
@@ -920,6 +967,16 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                 </Select>
               </div>
             )}
+            <div className="flex items-center gap-2 py-1">
+              <input
+                id="not-null-checkbox"
+                type="checkbox"
+                className="h-4 w-4 rounded-none border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring accent-primary cursor-pointer"
+                checked={newColumnNotNull}
+                onChange={(e) => setNewColumnNotNull(e.target.checked)}
+              />
+              <Label htmlFor="not-null-checkbox" className="cursor-pointer select-none">Not Null</Label>
+            </div>
           </div>
           <DialogFooter><Button onClick={handleConfirmAddColumn}>Add Column</Button></DialogFooter>
         </DialogContent>

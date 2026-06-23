@@ -12,15 +12,12 @@ import {
   CardFooter,
   CardContent
 } from "../../components/ui/card";
-import { Label } from "../../components/ui/label";
-import { Textarea } from "../../components/ui/textarea";
 import {
   Plus,
   Trash2,
   Edit2,
   FolderOpen,
-  Search,
-  X
+  Search
 } from "lucide-react";
 
 // Custom Input component to resolve missing module error
@@ -47,16 +44,19 @@ export default function ProjectsIndex() {
 
   // Initialize with some mock data or load from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("scribe_projects");
-    if (saved) {
-      setProjects(JSON.parse(saved));
-    } else {
-      const initial = [
-        { id: "1", name: "RPG Items", description: "Weapon and armor stats for Act 1", updatedAt: new Date().toLocaleDateString() }
-      ];
-      setProjects(initial);
-      localStorage.setItem("scribe_projects", JSON.stringify(initial));
-    }
+    const timer = setTimeout(() => {
+      const saved = localStorage.getItem("scribe_projects");
+      if (saved) {
+        setProjects(JSON.parse(saved));
+      } else {
+        const initial = [
+          { id: "1", name: "RPG Items", description: "Weapon and armor stats for Act 1", updatedAt: new Date().toLocaleDateString() }
+        ];
+        setProjects(initial);
+        localStorage.setItem("scribe_projects", JSON.stringify(initial));
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // Set page title for projects index
