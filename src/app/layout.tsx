@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Roboto, Playfair_Display } from "next/font/google";
+import { Geist, Geist_Mono, Roboto } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "../lib/utils";
 
-const playfairDisplayHeading = Playfair_Display({subsets:['latin'],variable:'--font-heading'});
+const roboto = Roboto({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["100", "300", "400", "500", "700", "900"],
+});
 
-const roboto = Roboto({subsets:['latin'],variable:'--font-sans'});
+const fontHeading = localFont({
+  src: "../../public/04B_03__.ttf",
+  variable: "--font-heading",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("h-full", "antialiased", "dark", geistSans.variable, geistMono.variable, "font-sans", roboto.variable, playfairDisplayHeading.variable)}
+      className={cn("h-full", "antialiased", "dark", geistSans.variable, geistMono.variable, "font-sans", roboto.variable, fontHeading.variable)}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

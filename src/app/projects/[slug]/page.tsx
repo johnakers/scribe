@@ -612,7 +612,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
           </div>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b pt-4 pb-12">
             <div>
-              <h1 className="text-5xl font-extrabold tracking-tight mb-3 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent" style={{ minHeight: "60px" }}>
+              <h1 className="text-5xl font-heading font-extrabold tracking-tight mb-3 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent" style={{ minHeight: "60px" }}>
                 {project.name}
               </h1>
               <p className="text-muted-foreground text-xl max-w-2xl">{project.description}</p>
@@ -670,7 +670,7 @@ export default function ProjectShowPage({ params }: { params: Promise<{ slug: st
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <TableIcon className="h-6 w-6 text-primary" />
                     <Input
-                      className="h-10 w-full bg-transparent font-bold text-2xl border-none focus-visible:ring-0 px-0 hover:bg-muted/50 rounded-none truncate"
+                      className="h-10 w-full bg-transparent font-bold text-2xl border-none focus-visible:ring-0 px-0 hover:bg-muted/50 rounded-none truncate font-heading"
                       value={table.name}
                       onChange={(e) => updateTable(table.id, { name: e.target.value.toLowerCase() })}
                     />

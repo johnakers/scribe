@@ -22,7 +22,7 @@ export default function Home() {
         <span>The Game Data Architect</span>
       </div>
 
-      <h1 className="text-5xl font-black tracking-tighter sm:text-7xl mb-2 bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
+      <h1 className="text-5xl font-heading font-black tracking-tighter sm:text-7xl mb-2 bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
         Scribe
       </h1>
 

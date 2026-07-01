@@ -111,7 +111,7 @@ export default function ProjectsIndex() {
       <div className="w-full px-4 sm:px-10 py-10">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">Projects</h1>
+            <h1 className="text-4xl font-heading font-bold tracking-tight">Projects</h1>
             <p className="text-muted-foreground">Create and manage your game data architectures.</p>
           </div>
           <Button onClick={() => { setIsAdding(true); setEditingId(null); setForm({name:"", description:""}); }}>
@@ -150,7 +150,7 @@ export default function ProjectsIndex() {
             <Card key={project.id} className="group hover:border-primary/50 transition-colors">
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <CardTitle className="text-xl">{project.name}</CardTitle>
+                  <CardTitle className="text-xl font-heading">{project.name}</CardTitle>
                   <Link href={`/projects/${project.id}`}>
                     <FolderOpen className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors cursor-pointer" />
                   </Link>
